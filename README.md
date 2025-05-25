@@ -44,6 +44,7 @@ dataset_insight_tool/
         * `summarize_all`: One overall insight for the entire dataset (based on concatenated text from records).
     * `MAX_CHARS_FOR_SUMMARY_PROMPT`: (Used with `summarize_all`) Maximum characters of combined text to send in a summary prompt. Default: `15000`. Optional.
     * `MAX_RECORDS_FOR_SUMMARY`: (Used with `summarize_all`) Maximum number of records to include in the combined text for summarization. Default: `100`. Optional.
+    * `DYNAMODB_TABLE_NAME`: The name of the DynamoDB database where augmented datasets will be stored additionally.
 
 
 
@@ -85,5 +86,5 @@ dataset_insight_tool/
         * **Prefix/Suffix** (optional): If trigger only for files in a specific folder or with specific extensions is desired.
 
 7.  **Test:**
-    Upload CSV file (e.g., with a `text_column`) to folder in S3 bucket and check the CloudWatch logs for the Lambda function and the output S3 bucket for the augmented file.
+    Upload CSV file (e.g., with a `text_column`) to folder in S3 bucket, check the CloudWatch logs for the Lambda function and the output S3 bucket as well as the DynamoDB for the augmented file.
 
