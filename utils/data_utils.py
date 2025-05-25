@@ -5,6 +5,8 @@ import csv
 import io
 import json
 import logging
+from lambda_function import TEXT_COLUMN_NAME
+
 try:
     import pyarrow.parquet as pq
     import pyarrow as pa
@@ -14,6 +16,28 @@ except ImportError:
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+
+def get_text_from_record(record, index):
+    """Helper to extract text from a record based on configured column names."""
+    text_to_analyze = None
+    if TEXT_COLUMN_NAME in record and isinstance(record[TEXT_COLUMN_NAME], str):
+        text_to_analyze = record[TEXT_COLUMN_NAME]
+    elif 'text_content' in record and isinstance(record['text_content'], str):
+        text_to_analyze = record['text_content']
+    elif 'text_column' in record and isinstance(record['text_column'], str):
+        text_to_analyze = record['text_column']
+    else: # Fallback: try to find the first string field to analyze
+        for value in record.values():
+            if isinstance(value, str):
+                text_to_analyze = value
+                logger.debug(f"Used first string value as text_to_analyze for record {index}")
+                break
+
+    if not text_to_analyze:
+        logger.warning(f"Could not find suitable text field for insight generation in record {index}. Searched for '{TEXT_COLUMN_NAME}', 'text_content', 'text_column', or first string.")
+    return text_to_analyze
+
 
 def process_data(file_content_bytes: bytes, file_key: str) -> list[dict]:
     """

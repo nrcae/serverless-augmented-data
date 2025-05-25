@@ -8,7 +8,8 @@ import logging
 import csv
 import io
 from utils.openai_utils import get_openai_insights
-from utils.data_utils import process_data
+from utils.data_utils import process_data, get_text_from_record
+from utils.serialization import serialize_output
 
 # For Parquet output, if supported
 try:
@@ -35,26 +36,6 @@ TEXT_COLUMN_NAME = os.environ.get('TEXT_COLUMN_NAME', 'text_column')
 PROMPT_STRATEGY = os.environ.get('PROMPT_STRATEGY', 'per_record').lower()
 MAX_CHARS_FOR_SUMMARY_PROMPT = int(os.environ.get('MAX_CHARS_FOR_SUMMARY_PROMPT', 15000)) # Max chars for summarize_all prompt (OpenAI token limits)
 MAX_RECORDS_FOR_SUMMARY = int(os.environ.get('MAX_RECORDS_FOR_SUMMARY', 100)) # Max records to include in 'summarize_all' to avoid excessive data
-
-def get_text_from_record(record, index):
-    """Helper to extract text from a record based on configured column names."""
-    text_to_analyze = None
-    if TEXT_COLUMN_NAME in record and isinstance(record[TEXT_COLUMN_NAME], str):
-        text_to_analyze = record[TEXT_COLUMN_NAME]
-    elif 'text_content' in record and isinstance(record['text_content'], str):
-        text_to_analyze = record['text_content']
-    elif 'text_column' in record and isinstance(record['text_column'], str):
-        text_to_analyze = record['text_column']
-    else: # Fallback: try to find the first string field to analyze
-        for value in record.values():
-            if isinstance(value, str):
-                text_to_analyze = value
-                # logger.debug(f"Used first string value as text_to_analyze for record {index}")
-                break
-
-    if not text_to_analyze:
-        logger.warning(f"Could not find suitable text field for insight generation in record {index}. Searched for '{TEXT_COLUMN_NAME}', 'text_content', 'text_column', or first string.")
-    return text_to_analyze
 
 
 def lambda_handler(event, context):
@@ -175,33 +156,7 @@ def lambda_handler(event, context):
         output_body = None
         content_type = 'application/octet-stream'
 
-        if OUTPUT_FORMAT == 'json':
-            output_body = json.dumps(augmented_data, indent=2)
-            content_type = 'application/json'
-        elif OUTPUT_FORMAT == 'csv':
-            if not augmented_data:
-                output_body = ""
-            else:
-                headers = augmented_data[0].keys() if augmented_data else []
-                csv_buffer = io.StringIO()
-                writer = csv.DictWriter(csv_buffer, fieldnames=headers, extrasaction='ignore')
-                writer.writeheader()
-                writer.writerows(augmented_data)
-                output_body = csv_buffer.getvalue()
-            content_type = 'text/csv'
-        elif OUTPUT_FORMAT == 'parquet':
-            if not augmented_data:
-                 output_body = b''
-            else:
-                try:
-                    table = pa.Table.from_pylist(augmented_data)
-                    buffer = io.BytesIO()
-                    pq.write_table(table, buffer)
-                    output_body = buffer.getvalue()
-                except Exception as e:
-                    logger.error(f"Error converting augmented data to Parquet: {e}", exc_info=True)
-                    return {'statusCode': 500, 'body': json.dumps({'error': f"Failed to prepare Parquet output: {str(e)}"}) }
-            content_type = 'application/vnd.apache.parquet'
+        output_body, content_type = serialize_output(augmented_data, OUTPUT_FORMAT)
 
         if output_body is not None:
             try:
