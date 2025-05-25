@@ -10,6 +10,7 @@ logger.setLevel(logging.INFO)
 
 MAX_RETRIES = 3
 INITIAL_BACKOFF = 1
+MAX_BACKOFF = 30
 
 def get_openai_insights(prompt: str, api_key: str, model: str = "gpt-3.5-turbo") -> str:
     """
@@ -24,14 +25,13 @@ def get_openai_insights(prompt: str, api_key: str, model: str = "gpt-3.5-turbo")
         str: The insight text from OpenAI.
 
     Raises:
-        Exception: If the API call fails after retries.
+        ValueError: If the API key is not provided.
+        Exception: If the API call fails after retries or due to other errors.
     """
     if not api_key:
         logger.error("OpenAI API key not provided to get_openai_insights.")
         raise ValueError("API key is required for OpenAI calls.")
 
-    # Initialize client here or ensure it's initialized globally
-    # For Lambda, it's often better to initialize clients outside the handler
     openai.api_key = api_key
 
     current_retry = 0
@@ -39,47 +39,50 @@ def get_openai_insights(prompt: str, api_key: str, model: str = "gpt-3.5-turbo")
 
     while current_retry <= MAX_RETRIES:
         try:
-            logger.info(f"Sending prompt to OpenAI (model: {model}): \"{prompt[:100]}...\"")
+            logger.info(f"Attempt {current_retry + 1}/{MAX_RETRIES + 1}: Sending prompt to OpenAI (model: {model}). "
+                        f"Prompt: \"{prompt[:100]}...\"")
+
             # Using the older OpenAI SDK structure with ChatCompletion
             response = openai.ChatCompletion.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": "You are an AI assistant that provides concise data insights."},
                     {"role": "user", "content": prompt}
-                ],
+                ]
             )
             
-            # Ensure there are choices and a message
-            if response.choices and response.choices[0].message:
+            # Ensure there are choices, a message, and content in the message
+            if response.choices and \
+               response.choices[0].message and \
+               response.choices[0].message.content:
                 insight = response.choices[0].message.content.strip()
-                logger.info(f"Received insight from OpenAI: \"{insight[:100]}...\"")
+                logger.info(f"Successfully received insight from OpenAI: \"{insight[:100]}...\"")
                 return insight
             else:
-                logger.error("OpenAI response did not contain expected data (choices or message).")
-                # This specific error might not be retryable in the same way as a network error
+                logger.error("OpenAI response did not contain expected data (choices, message, or content).")
+                # This is considered a non-retryable error for this specific issue.
                 raise Exception("Invalid response structure from OpenAI.")
 
-
-        except openai.APIError as e: # Handles API errors, rate limits, etc.
-            logger.error(f"OpenAI API error: {e} (Attempt {current_retry + 1}/{MAX_RETRIES + 1})")
-            if e.status_code == 429: # Rate limit error
-                logger.warning(f"Rate limit hit. Retrying in {backoff_period} seconds...")
-            elif e.status_code == 500: # Server error
-                 logger.warning(f"OpenAI server error. Retrying in {backoff_period} seconds...")
+        except openai.APIError as e:  # Handles API errors from OpenAI (e.g., rate limits, server errors)
+            logger.warning(f"OpenAI API error on attempt {current_retry + 1}: {e}")
 
             if current_retry == MAX_RETRIES:
-                logger.error("Max retries reached. Failing OpenAI call.")
+                logger.error("Max retries reached. Failing OpenAI call due to APIError.")
                 raise
+
+            # Log specific warnings for common retryable statuses
+            if hasattr(e, 'status_code'):
+                if e.status_code == 429:  # Rate limit error
+                    logger.info(f"Rate limit hit. Retrying in {backoff_period}s...")
+                elif e.status_code >= 500:  # Server-side errors (500, 502, 503, 504, etc.)
+                    logger.info(f"OpenAI server error (HTTP {e.status_code}). Retrying in {backoff_period}s...")
             
             time.sleep(backoff_period)
-            backoff_period *= 2  # Exponential backoff
+            backoff_period = min(backoff_period * 2, MAX_BACKOFF)  # Exponential backoff with a cap
             current_retry += 1
 
         except Exception as e:
-            # Catch any other unexpected errors during the API call
-            logger.error(f"An unexpected error occurred during OpenAI call: {e}")
-            # For this generic handler, we re-raise to indicate failure.
-            raise Exception(f"Failed to get insights from OpenAI: {str(e)}")
-
-    # Should not be reached if MAX_RETRIES is handled correctly, but as a fallback:
-    raise Exception("OpenAI call failed after maximum retries.")
+            # Catches other unexpected errors during the API call or response processing
+            logger.error(f"An unexpected non-API error occurred during OpenAI call on attempt {current_retry + 1}: {e}", exc_info=True)
+            # Re-raise the caught exception, chained for better context
+            raise Exception(f"Failed to get insights from OpenAI due to an unexpected error: {e}") from e
