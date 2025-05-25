@@ -124,20 +124,44 @@ def lambda_handler(event, context):
             logger.info(f"Generated insights per record for {len(original_data)} records.")
 
         elif PROMPT_STRATEGY == 'summarize_all':
-            all_texts = []
-            for i, record in enumerate(original_data[:MAX_RECORDS_FOR_SUMMARY]): # Limit records
+            texts_for_summary_list = []
+            current_char_count = 0
+
+            # Estimate overhead for "Record X: " and newline characters
+            for i, record in enumerate(original_data[:MAX_RECORDS_FOR_SUMMARY]):
                 text = get_text_from_record(record, i)
                 if text:
-                    all_texts.append(f"Record {i+1}: {text}")
+                    # Construct the entry string that would be appended
+                    entry_prefix = f"Record {i+1}: "
+                    entry_text = text
+                    full_entry = entry_prefix + entry_text
 
-            if all_texts:
-                combined_text = "\n".join(all_texts)
-                # Truncate if too long to avoid exceeding token limits
+                    # Calculate length to add: len(full_entry) + 1 for newline (if not first item)
+                    chars_to_add = len(full_entry) + (1 if texts_for_summary_list else 0)
+
+                    if current_char_count + chars_to_add <= MAX_CHARS_FOR_SUMMARY_PROMPT:
+                        texts_for_summary_list.append(full_entry)
+                        current_char_count += chars_to_add
+                    else:
+                        # If adding the current full_entry would exceed, try adding a truncated part of it
+                        if not texts_for_summary_list:
+                             # Calculate remaining space for the text part of the entry
+                            remaining_space_for_text = MAX_CHARS_FOR_SUMMARY_PROMPT - (len(entry_prefix) + (1 if texts_for_summary_list else 0))
+                            if remaining_space_for_text > 0:
+                                texts_for_summary_list.append(entry_prefix + entry_text[:remaining_space_for_text])
+                                current_char_count += len(entry_prefix) + remaining_space_for_text + (1 if texts_for_summary_list else 0)
+                                logger.warning(f"First text record for 'summarize_all' was truncated to fit MAX_CHARS_FOR_SUMMARY_PROMPT.")
+                            # If no space even for prefix and some text, texts_for_summary_list will remain empty.
+                        else:
+                            logger.warning(f"Stopped adding records to 'summarize_all' prompt at record {i} to stay within {MAX_CHARS_FOR_SUMMARY_PROMPT} character limit. Processed {len(texts_for_summary_list)} records for summary.")
+                        break
+
+            if texts_for_summary_list:
+                combined_text = "\n".join(texts_for_summary_list)
                 if len(combined_text) > MAX_CHARS_FOR_SUMMARY_PROMPT:
                     combined_text = combined_text[:MAX_CHARS_FOR_SUMMARY_PROMPT]
                     logger.warning(f"Combined text for 'summarize_all' was truncated to {MAX_CHARS_FOR_SUMMARY_PROMPT} characters.")
 
-                # Prompt to summarize the collection of texts.
                 summary_prompt = (
                     f"The following are multiple data records. "
                     f"Please provide a single, comprehensive summary of the key themes, trends, or overall insights found across all these records. "
