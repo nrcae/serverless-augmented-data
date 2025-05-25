@@ -65,18 +65,12 @@ def lambda_handler(event, context):
     logger.info(f"Received event: {json.dumps(event)}")
     logger.info(f"Using prompt strategy: {PROMPT_STRATEGY}")
 
-    if not OPENAI_API_KEY:
-        logger.error("OpenAI API key not configured.")
+    if not OPENAI_API_KEY or not OUTPUT_BUCKET_NAME:
+        logger.error("Core envirnoment variables not configured.")
         return {'statusCode': 500, 'body': json.dumps({'error': 'OpenAI API key not configured.'})}
-    if not OUTPUT_BUCKET_NAME:
-        logger.error("Output S3 bucket name not configured.")
-        return {'statusCode': 500, 'body': json.dumps({'error': 'Output S3 bucket name not configured.'})}
-    if OUTPUT_FORMAT not in ['json', 'csv', 'parquet']:
+    if OUTPUT_FORMAT not in ['json', 'csv', 'parquet'] or not PYARROW_AVAILABLE:
         logger.error(f"Unsupported OUTPUT_FORMAT: {OUTPUT_FORMAT}.")
         return {'statusCode': 400, 'body': json.dumps({'error': f"Unsupported OUTPUT_FORMAT: {OUTPUT_FORMAT}"})}
-    if OUTPUT_FORMAT == 'parquet' and not PYARROW_AVAILABLE:
-        logger.error("Output format is Parquet, but PyArrow library is not available.")
-        return {'statusCode': 500, 'body': json.dumps({'error': 'PyArrow for Parquet not available.'})}
     if PROMPT_STRATEGY not in ['per_record', 'summarize_all']:
         logger.error(f"Unsupported PROMPT_STRATEGY: {PROMPT_STRATEGY}.")
         return {'statusCode': 400, 'body': json.dumps({'error': f"Unsupported PROMPT_STRATEGY: {PROMPT_STRATEGY}"})}
@@ -85,23 +79,16 @@ def lambda_handler(event, context):
         bucket_name = event['Records'][0]['s3']['bucket']['name']
         object_key = event['Records'][0]['s3']['object']['key']
         logger.info(f"Processing file: s3://{bucket_name}/{object_key}")
-
-        # 1. Download and process the input data
-        try:
-            s3_object = s3_client.get_object(Bucket=bucket_name, Key=object_key)
-            file_content_bytes = s3_object['Body'].read() 
-            original_data = process_data(file_content_bytes, object_key)
-            logger.info(f"Successfully processed {len(original_data)} records from input file.")
-        except Exception as e:
-            logger.error(f"Error processing input file {object_key}: {e}", exc_info=True)
-            return {'statusCode': 500, 'body': json.dumps({'error': f"Failed to process input file: {str(e)}"}) }
+        s3_object = s3_client.get_object(Bucket=bucket_name, Key=object_key)
+        file_content_bytes = s3_object['Body'].read()
+        original_data = process_data(file_content_bytes, object_key)
+        logger.info(f"Successfully processed {len(original_data)} records from input file.")
 
         if not original_data:
             logger.warning("No data processed from the input file.")
             return {'statusCode': 200, 'body': json.dumps({'message': 'No data to process.'})}
 
         # 2. Generate insights using OpenAI based on PROMPT_STRATEGY
-        insights = []
         augmented_data = [record.copy() for record in original_data]
 
         if PROMPT_STRATEGY == 'per_record':
@@ -110,10 +97,8 @@ def lambda_handler(event, context):
                 if text_to_analyze:
                     prompt = f"Provide a concise analysis or key insight for the following data point: \"{text_to_analyze}\""
                     try:
-                        insight_text = get_openai_insights(prompt, OPENAI_API_KEY)
-                        insights.append({'original_record_index': index, 'insight': insight_text})
                         if index < len(augmented_data):
-                           augmented_data[index]['ai_insight'] = insight_text
+                           augmented_data[index]['ai_insight'] = get_openai_insights(prompt, OPENAI_API_KEY)
                     except Exception as e:
                         logger.error(f"Error getting OpenAI insight for record {index}: {e}")
                         if index < len(augmented_data):
@@ -187,7 +172,6 @@ def lambda_handler(event, context):
         # 3. Save the augmented dataset
         base_name = os.path.splitext(os.path.basename(object_key))[0]
         augmented_file_key = f"augmented_datasets/augmented_{base_name}.{OUTPUT_FORMAT}"
-
         output_body = None
         content_type = 'application/octet-stream'
 
