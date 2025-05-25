@@ -134,7 +134,12 @@ def lambda_handler(event, context):
             for index, record in enumerate(original_data):
                 text_to_analyze = get_text_from_record(record, index)
                 if text_to_analyze:
-                    prompt = f"Provide a concise analysis or key insight for the following data point: \"{text_to_analyze}\""
+                    prompt = (
+                        f"Analyze the following single data point and give a concise, actionable insight. "
+                        f"Focus on key takeaways, potential implications, or notable observations. "
+                        f"The insight should be no more than 2-3 sentences.\n\n"
+                        f"Data Point: \"{text_to_analyze}\""
+                    )
                     try:
                         if index < len(augmented_data):
                            augmented_data[index]['ai_insight'] = get_openai_insights(prompt, OPENAI_API_KEY)
@@ -187,9 +192,12 @@ def lambda_handler(event, context):
                     logger.warning(f"Combined text for 'summarize_all' was truncated to {MAX_CHARS_FOR_SUMMARY_PROMPT} characters.")
 
                 summary_prompt = (
-                    f"The following are multiple data records. "
-                    f"Please provide a single, comprehensive summary of the key themes, trends, or overall insights found across all these records. "
-                    f"Do not analyze each record individually in your response; provide one holistic summary.\n\n"
+                    f"You are an expert data analyst. The following is a collection of individual data records. "
+                    f"Your task is to identify and synthesize the overarching themes, significant trends, "
+                    f"and key insights present across *all* these records. "
+                    f"Give a single, comprehensive summary that highlights the most important findings. "
+                    f"Avoid analyzing each record separately. Structure your response as a cohesive narrative. "
+                    f"Aim for a summary that is insightful and concise, ideally within 3-5 paragraphs.\n\n"
                     f"Data Records:\n{combined_text}"
                 )
 
