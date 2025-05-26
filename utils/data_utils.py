@@ -5,7 +5,7 @@ import csv
 import io
 import json
 import logging
-from lambda_function import TEXT_COLUMN_NAME
+from config import TEXT_COLUMN_NAME
 
 try:
     import pyarrow.parquet as pq
@@ -84,7 +84,7 @@ def process_data(file_content_bytes: bytes, file_key: str) -> list[dict]:
             elif isinstance(data, dict): # Or a single object
                 records = [data]
             else: # Or a JSON Lines format (each line is a JSON object)
-                logger.info("Attempting to process as JSON Lines format.")
+                logger.debug("Attempting to process as JSON Lines format.")
                 file_content_str_lines = io.StringIO(file_content_str)
                 for line in file_content_str_lines:
                     line = line.strip()

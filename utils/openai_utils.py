@@ -39,7 +39,7 @@ def get_openai_insights(prompt: str, api_key: str, model: str = "gpt-3.5-turbo")
 
     while current_retry <= MAX_RETRIES:
         try:
-            logger.info(f"Attempt {current_retry + 1}/{MAX_RETRIES + 1}: Sending prompt to OpenAI (model: {model}). "
+            logger.debug(f"Attempt {current_retry + 1}/{MAX_RETRIES + 1}: Sending prompt to OpenAI (model: {model}). "
                         f"Prompt: \"{prompt[:100]}...\"")
 
             # Using the older OpenAI SDK structure with ChatCompletion
@@ -56,7 +56,7 @@ def get_openai_insights(prompt: str, api_key: str, model: str = "gpt-3.5-turbo")
                response.choices[0].message and \
                response.choices[0].message.content:
                 insight = response.choices[0].message.content.strip()
-                logger.info(f"Successfully received insight from OpenAI: \"{insight[:100]}...\"")
+                logger.debug(f"Successfully received insight from OpenAI: \"{insight[:100]}...\"")
                 return insight
             else:
                 logger.error("OpenAI response did not contain expected data (choices, message, or content).")
@@ -73,9 +73,9 @@ def get_openai_insights(prompt: str, api_key: str, model: str = "gpt-3.5-turbo")
             # Log specific warnings for common retryable statuses
             if hasattr(e, 'status_code'):
                 if e.status_code == 429:  # Rate limit error
-                    logger.info(f"Rate limit hit. Retrying in {backoff_period}s...")
+                    logger.debug(f"Rate limit hit. Retrying in {backoff_period}s...")
                 elif e.status_code >= 500:  # Server-side errors (500, 502, 503, 504, etc.)
-                    logger.info(f"OpenAI server error (HTTP {e.status_code}). Retrying in {backoff_period}s...")
+                    logger.debug(f"OpenAI server error (HTTP {e.status_code}). Retrying in {backoff_period}s...")
             
             time.sleep(backoff_period)
             backoff_period = min(backoff_period * 2, MAX_BACKOFF)  # Exponential backoff with a cap
