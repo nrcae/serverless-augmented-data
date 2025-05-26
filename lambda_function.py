@@ -5,8 +5,6 @@ import json
 import os
 import boto3
 import logging
-import csv
-import io
 from datetime import datetime
 from utils.openai_utils import get_openai_insights
 from utils.data_utils import process_data, get_text_from_record
@@ -117,7 +115,7 @@ def lambda_handler(event, context):
     try:
         bucket_name = event['Records'][0]['s3']['bucket']['name']
         object_key = event['Records'][0]['s3']['object']['key']
-        logger.info(f"Processing file: s3://{bucket_name}/{object_key}")
+        logger.debug(f"Processing file: s3://{bucket_name}/{object_key}")
         s3_object = s3_client.get_object(Bucket=bucket_name, Key=object_key)
         file_content_bytes = s3_object['Body'].read()
         original_data = process_data(file_content_bytes, object_key)
@@ -159,31 +157,33 @@ def lambda_handler(event, context):
             # Estimate overhead for "Record X: " and newline characters
             for i, record in enumerate(original_data[:MAX_RECORDS_FOR_SUMMARY]):
                 text = get_text_from_record(record, i)
-                if text:
-                    # Construct the entry string that would be appended
-                    entry_prefix = f"Record {i+1}: "
-                    entry_text = text
-                    full_entry = entry_prefix + entry_text
+                if not text:
+                    continue
+                # Construct the entry string that would be appended
+                entry_prefix = f"Record {i+1}: "
+                full_entry = entry_prefix + text
+                newline_cost = 1 if texts_for_summary_list else 0
+                entry_length = len(full_entry) + newline_cost
 
-                    # Calculate length to add: len(full_entry) + 1 for newline (if not first item)
-                    chars_to_add = len(full_entry) + (1 if texts_for_summary_list else 0)
+                if current_char_count + entry_length <= MAX_CHARS_FOR_SUMMARY_PROMPT:
+                    texts_for_summary_list.append(full_entry)
+                    current_char_count += entry_length
 
-                    if current_char_count + chars_to_add <= MAX_CHARS_FOR_SUMMARY_PROMPT:
-                        texts_for_summary_list.append(full_entry)
-                        current_char_count += chars_to_add
+                else:
+                    # If adding the current full_entry would exceed, try adding a truncated part of it
+                    if not texts_for_summary_list:
+                        # Calculate remaining space for the text part of the entry
+                        remaining_space_for_text = MAX_CHARS_FOR_SUMMARY_PROMPT - len(entry_prefix)
+                        if remaining_space_for_text > 0:
+                            truncated_entry = entry_prefix + text[:remaining_space_for_text]
+                            texts_for_summary_list.append(truncated_entry)
+                            current_char_count += len(truncated_entry)
+                            logger.warning(f"First text record for 'summarize_all' was truncated to fit MAX_CHARS_FOR_SUMMARY_PROMPT.")
                     else:
-                        # If adding the current full_entry would exceed, try adding a truncated part of it
-                        if not texts_for_summary_list:
-                             # Calculate remaining space for the text part of the entry
-                            remaining_space_for_text = MAX_CHARS_FOR_SUMMARY_PROMPT - (len(entry_prefix) + (1 if texts_for_summary_list else 0))
-                            if remaining_space_for_text > 0:
-                                texts_for_summary_list.append(entry_prefix + entry_text[:remaining_space_for_text])
-                                current_char_count += len(entry_prefix) + remaining_space_for_text + (1 if texts_for_summary_list else 0)
-                                logger.warning(f"First text record for 'summarize_all' was truncated to fit MAX_CHARS_FOR_SUMMARY_PROMPT.")
-                            # If no space even for prefix and some text, texts_for_summary_list will remain empty.
-                        else:
-                            logger.warning(f"Stopped adding records to 'summarize_all' prompt at record {i} to stay within {MAX_CHARS_FOR_SUMMARY_PROMPT} character limit. Processed {len(texts_for_summary_list)} records for summary.")
-                        break
+                        logger.warning(f"Stopped adding records to 'summarize_all' prompt at record {i} "
+                                       " to stay within {MAX_CHARS_FOR_SUMMARY_PROMPT} character limit. "
+                                       " Processed {len(texts_for_summary_list)} records for summary.")
+                    break
 
             if texts_for_summary_list:
                 combined_text = "\n".join(texts_for_summary_list)
