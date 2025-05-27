@@ -5,11 +5,11 @@ import json
 import os
 import boto3
 import logging
-from datetime import datetime
 from utils.openai_utils import get_openai_insights
 from utils.data_utils import process_data, get_text_from_record
 from utils.serialization import serialize_output
-from config import OPENAI_API_KEY, OUTPUT_BUCKET_NAME, OUTPUT_FORMAT, PROMPT_STRATEGY, MAX_CHARS_FOR_SUMMARY_PROMPT, MAX_RECORDS_FOR_SUMMARY
+from utils.dynamodb_utils import save_to_dynamodb
+from config import OPENAI_API_KEY, OUTPUT_BUCKET_NAME, OUTPUT_FORMAT, PROMPT_STRATEGY, MAX_CHARS_FOR_SUMMARY_PROMPT, MAX_RECORDS_FOR_SUMMARY, DYNAMODB_TABLE_NAME
 
 # For Parquet output, if supported
 try:
@@ -24,64 +24,6 @@ logger.setLevel(logging.INFO)
 
 # Initialize S3 client
 s3_client = boto3.client('s3')
-dynamodb = boto3.resource('dynamodb')
-
-# DynamoDB specific environment variable
-DYNAMODB_TABLE_NAME = os.environ.get('DYNAMODB_TABLE_NAME')
-
-def save_to_dynamodb(data: list, table_name: str, object_key: str):
-    """
-    Saves the augmented data to a DynamoDB table.
-    Each record in the augmented_data list will be saved as a separate item.
-    Adds a unique ID and a timestamp to each item.
-    Handles potential DynamoDB item size limits by truncating large string fields.
-    """
-    if not table_name:
-        logger.warning("DYNAMODB_TABLE_NAME is not set. Skipping DynamoDB save.")
-        return
-
-    table = dynamodb.Table(table_name)
-    timestamp = datetime.utcnow().isoformat() + "Z" # ISO 8601 format with Z for UTC
-
-    logger.info(f"Attempting to save {len(data)} records to DynamoDB table: {table_name}")
-
-    for i, record in enumerate(data):
-        try:
-            # Create a unique ID for each item based on the original object key and record index
-            item_id = f"{object_key.replace('/', '_')}_{i}"
-
-            # Convert non-serializable types and handle potential large strings.
-            dynamodb_item = {
-                'id': item_id,
-                'timestamp': timestamp,
-                'original_file_key': object_key,
-            }
-
-            # Add all key-value pairs from the record to the dynamodb_item
-            for key, value in record.items():
-                # DynamoDB doesn't support empty strings or empty sets.
-                # Truncate string values if they are excessively long.
-                if isinstance(value, str):
-                    if not value: # DynamoDB does not allow empty strings
-                        continue
-                    if len(value.encode('utf-8')) > 300 * 1024: # Roughly 300KB (limit 400k)
-                        logger.warning(f"Truncating large string field '{key}' for item '{item_id}'.")
-                        value = value[:100000] + "... (truncated)" # Truncate to first 100k chars
-                elif isinstance(value, (list, dict)):
-                    pass
-                elif value is None: # DynamoDB does not allow None values
-                    continue
-
-                dynamodb_item[key] = value
-
-            table.put_item(Item=dynamodb_item)
-            logger.debug(f"Successfully saved item {item_id} to DynamoDB.")
-        except Exception as e:
-            logger.error(f"Error saving record {i} (ID: {item_id}) to DynamoDB: {e}", exc_info=True)
-            # Continue processing other records even if one fails
-
-    logger.info(f"Finished attempting to save records to DynamoDB.")
-
 
 def lambda_handler(event, context):
     """

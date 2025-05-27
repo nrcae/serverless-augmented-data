@@ -13,3 +13,5 @@ TEXT_COLUMN_NAME = os.environ.get('TEXT_COLUMN_NAME', 'text_column')
 PROMPT_STRATEGY = os.environ.get('PROMPT_STRATEGY', 'per_record').lower()
 MAX_CHARS_FOR_SUMMARY_PROMPT = int(os.environ.get('MAX_CHARS_FOR_SUMMARY_PROMPT', 15000)) # Max chars for summarize_all prompt (OpenAI token limits)
 MAX_RECORDS_FOR_SUMMARY = int(os.environ.get('MAX_RECORDS_FOR_SUMMARY', 100)) # Max records to include in 'summarize_all' to avoid excessive data
+# DynamoDB specific environment variable
+DYNAMODB_TABLE_NAME = os.environ.get('DYNAMODB_TABLE_NAME')
