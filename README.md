@@ -15,9 +15,14 @@ The augmented dataset (original data + AI insights) is then stored in an S3 buck
 ```
 dataset_insight_tool/
 ├── lambda_function.py       # Main Lambda handler
+├── config.py                # Environment variables
 ├── utils                    # Utilities
     ├── openai_utils.py      # OpenAI API interaction
     ├── data_utils.py        # Data processing and augmentation
+├── terraform                # Terraform configuration files
+    ├── main.tf              # Core AWS resources
+    ├── variables.tf         # Configuration of Variables
+    ├── outputs.tf           # Output configuration
 ├── requirements.txt         # Python dependencies
 └── README.md                # This file
 ```
