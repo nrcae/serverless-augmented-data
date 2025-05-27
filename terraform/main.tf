@@ -184,3 +184,89 @@ resource "aws_dynamodb_table" "insights_table" {
     Project     = "AIDatasetInsightTool"
   }
 }
+
+# --- SNS Topic for Notifications ---
+resource "aws_sns_topic_subscription" "lambda_alarms_email_subscription" {
+  count     = var.alarm_notification_email != "" ? 1 : 0 # Only create if email is given
+  topic_arn = aws_sns_topic.lambda_alarms_topic.arn
+  protocol  = "email"
+  endpoint  = var.alarm_notification_email
+}
+
+# --- CloudWatch Alarms for Lambda Function ---
+resource "aws_cloudwatch_metric_alarm" "lambda_error_alarm" {
+  alarm_name          = "${var.lambda_function_name}-errors-alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = "300" # 5 minutes
+  statistic           = "Sum"
+  threshold           = "0"   # Alarm if more than 0 errors
+  alarm_description   = "Alarm when the Lambda function has errors."
+  treat_missing_data  = "notBreaching" # Or "missing", "breaching", "ignore"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.dataset_insight_lambda.function_name
+  }
+
+  alarm_actions = [aws_sns_topic.lambda_alarms_topic.arn]
+  ok_actions    = [aws_sns_topic.lambda_alarms_topic.arn]
+  tags = {
+    Name        = "${var.lambda_function_name}-ErrorsAlarm"
+    Environment = var.environment
+    Project     = "AIDatasetInsightTool"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "lambda_throttles_alarm" {
+  alarm_name          = "${var.lambda_function_name}-throttles-alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = "300"
+  statistic           = "Sum"
+  threshold           = "0" # Alarm if more than 0 throttles
+  alarm_description   = "Alarm when the Lambda function is throttled."
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.dataset_insight_lambda.function_name
+  }
+
+  alarm_actions = [aws_sns_topic.lambda_alarms_topic.arn]
+  ok_actions    = [aws_sns_topic.lambda_alarms_topic.arn]
+  tags = {
+    Name        = "${var.lambda_function_name}-ThrottlesAlarm"
+    Environment = var.environment
+    Project     = "AIDatasetInsightTool"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "lambda_duration_alarm" {
+  count = var.lambda_duration_alarm_threshold_ms > 0 ? 1 : 0 # Only create if threshold is set
+
+  alarm_name          = "${var.lambda_function_name}-duration-alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "Duration"
+  namespace           = "AWS/Lambda"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = var.lambda_duration_alarm_threshold_ms
+  alarm_description   = "Alarm when the Lambda function average duration exceeds threshold."
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.dataset_insight_lambda.function_name
+  }
+
+  alarm_actions = [aws_sns_topic.lambda_alarms_topic.arn]
+  ok_actions    = [aws_sns_topic.lambda_alarms_topic.arn]
+  tags = {
+    Name        = "${var.lambda_function_name}-DurationAlarm"
+    Environment = var.environment
+    Project     = "AIDatasetInsightTool"
+  }
+}

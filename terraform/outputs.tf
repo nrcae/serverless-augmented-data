@@ -28,3 +28,8 @@ output "dynamodb_table_name" {
   description = "The name of the DynamoDB table."
   value       = aws_dynamodb_table.insights_table.name
 }
+
+output "sns_topic_lambda_alarms_arn" {
+  description = "ARN of the SNS topic for Lambda alarms."
+  value       = aws_sns_topic.lambda_alarms_topic.arn
+}

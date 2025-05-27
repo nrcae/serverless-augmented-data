@@ -114,5 +114,17 @@ variable "alarm_notification_email" {
 variable "lambda_duration_alarm_threshold_ms" {
   description = "Threshold in milliseconds for Lambda duration alarm. Set to 0 to disable this alarm."
   type        = number
+  default     = 15000
+}
+
+variable "alarm_notification_email" {
+  description = "Email address for alarm notifications. Leave blank to disable email subscription."
+  type        = string
+  default     = "" # "email@example.com"
+}
+
+variable "lambda_duration_alarm_threshold_ms" {
+  description = "Threshold in milliseconds for Lambda duration alarm. Set to 0 to disable this alarm."
+  type        = number
   default     = 0 # e.g., 240000 for 4 minutes (80% of 5 min timeout)
 }
