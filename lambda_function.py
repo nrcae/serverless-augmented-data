@@ -22,8 +22,10 @@ except ImportError:
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Initialize S3 client
+# Initialize S3 and DynamoDB client
 s3_client = boto3.client('s3')
+dynamodb = boto3.resource('dynamodb')
+
 
 def lambda_handler(event, context):
     """
@@ -174,7 +176,7 @@ def lambda_handler(event, context):
         # 4. Save the augmented dataset to DynamoDB (if DYNAMODB_TABLE_NAME is set)
         if DYNAMODB_TABLE_NAME:
             try:
-                save_to_dynamodb(augmented_data, DYNAMODB_TABLE_NAME, object_key)
+                save_to_dynamodb(augmented_data, DYNAMODB_TABLE_NAME, object_key, dynamodb)
                 logger.info(f"Augmented dataset saved to DynamoDB table: {DYNAMODB_TABLE_NAME}")
             except Exception as e:
                 logger.error(f"Error saving augmented dataset to DynamoDB: {e}", exc_info=True)
