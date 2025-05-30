@@ -6,7 +6,7 @@ The augmented dataset (original data + AI insights) is then stored in an S3 buck
 ## Features
 
 * **Serverless Architecture**: Uses AWS Lambda for event-driven processing.
-* **S3 Integration**: Triggers on file uploads to S3 and stores results in another S3 bucket.
+* **S3 and DynamoDB Integration**: Triggers on file uploads to S3 and stores results in another S3 bucket.
 * **AI-Powered Insights**: Leverages the OpenAI API to generate insights from data.
 * **Data Augmentation**: Combines original data with AI-generated insights.
 * **Minimal & Extendable**: Provides a basic framework that can be extended for various data types and insight generation strategies.
@@ -17,8 +17,10 @@ dataset_insight_tool/
 ├── lambda_function.py       # Main Lambda handler
 ├── config.py                # Environment variables
 ├── utils                    # Utilities
-    ├── openai_utils.py      # OpenAI API interaction
-    ├── data_utils.py        # Data processing and augmentation
+    ├── openai.py            # OpenAI API interaction
+    ├── data.py              # Data processing and augmentation
+    ├── dynamodb.py          # DynamoDB storage
+    ├── serialization.py     # Data serialization
 ├── terraform                # Terraform configuration files
     ├── main.tf              # Core AWS resources
     ├── variables.tf         # Configuration of Variables
