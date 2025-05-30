@@ -5,10 +5,10 @@ import json
 import os
 import boto3
 import logging
-from utils.openai_utils import get_openai_insights
-from utils.data_utils import process_data, get_text_from_record
+from utils.openai import get_openai_insights
+from utils.data import process_data, get_text_from_record
 from utils.serialization import serialize_output
-from utils.dynamodb_utils import save_to_dynamodb
+from utils.dynamodb import save_to_dynamodb
 from config import OPENAI_API_KEY, OUTPUT_BUCKET_NAME, OUTPUT_FORMAT, PROMPT_STRATEGY, MAX_CHARS_FOR_SUMMARY_PROMPT, MAX_RECORDS_FOR_SUMMARY, DYNAMODB_TABLE_NAME
 
 # For Parquet output, if supported

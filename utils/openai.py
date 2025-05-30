@@ -1,4 +1,4 @@
-# openai_utils.py
+# openai.py
 # Utilities for interacting with the OpenAI API.
 
 import openai

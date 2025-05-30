@@ -1,4 +1,4 @@
-# dynamodb_utils.py
+# dynamodb.py
 # Utilities for storing to dynamodb.
 
 import logging
